@@ -2372,6 +2372,59 @@ class TestWorkOrder(IntegrationTestCase):
 
 		stock_entry.submit()
 
+	def test_components_alternate_item_for_bom_based_manufacture_entry(self):
+		frappe.db.set_single_value("Manufacturing Settings", "backflush_raw_materials_based_on", "BOM")
+		frappe.db.set_single_value("Manufacturing Settings", "validate_components_quantities_per_bom", 1)
+
+		fg_item = "Test FG Item For Component Validation for alternate item"
+		source_warehouse = "Stores - _TC"
+		raw_materials = ["Test Component Validation RM Item 112", "Test Component Validation RM Item 22"]
+		alternate_item = ["Alternate Test Component Validation RM Item 1"]
+
+		make_item(fg_item, {"is_stock_item": 1})
+		for item in raw_materials + alternate_item:
+			make_item(item, {"is_stock_item": 1, "allow_alternative_item": 1})
+			test_stock_entry.make_stock_entry(
+				item_code=item,
+				target=source_warehouse,
+				qty=10,
+				basic_rate=100,
+			)
+
+		frappe.get_doc(
+			{
+				"doctype": "Item Alternative",
+				"item_code": raw_materials[0],
+				"alternative_item_code": alternate_item[0],
+				"two_way": 1,
+			}
+		).insert()
+
+		make_bom(item=fg_item, source_warehouse=source_warehouse, raw_materials=raw_materials)
+
+		wo = make_wo_order_test_record(
+			item=fg_item,
+			qty=10,
+			source_warehouse=source_warehouse,
+		)
+
+		transfer_entry = frappe.get_doc(make_stock_entry(wo.name, "Material Transfer for Manufacture", 10))
+		transfer_entry.save()
+		transfer_entry.items[0].item_code = alternate_item[0]
+		transfer_entry.items[0].original_item = raw_materials[0]
+		transfer_entry.submit()
+
+		self.assertTrue(transfer_entry.docstatus == 1)
+
+		manufacture_entry = frappe.get_doc(make_stock_entry(wo.name, "Manufacture", 10))
+		manufacture_entry.save()
+		self.assertTrue(manufacture_entry.items[0].item_code == alternate_item[0])
+		self.assertTrue(manufacture_entry.items[0].original_item == raw_materials[0])
+
+		manufacture_entry.submit()
+
+		frappe.db.set_single_value("Manufacturing Settings", "validate_components_quantities_per_bom", 0)
+
 	def test_components_qty_for_bom_based_manufacture_entry(self):
 		frappe.db.set_single_value("Manufacturing Settings", "backflush_raw_materials_based_on", "BOM")
 		frappe.db.set_single_value("Manufacturing Settings", "validate_components_quantities_per_bom", 1)
@@ -2552,6 +2605,187 @@ class TestWorkOrder(IntegrationTestCase):
 		for row in serial_nos:
 			status = frappe.db.get_value("Serial No", row, "status")
 			self.assertEqual(status, "Consumed")
+
+	def test_stock_reservation_for_serialized_raw_material(self):
+		from erpnext.stock.doctype.stock_entry.stock_entry_utils import (
+			make_stock_entry as make_stock_entry_test_record,
+		)
+
+		production_item = "Test Stock Reservation FG 1"
+		rm_item = "Test Stock Reservation RM 1"
+		source_warehouse = "Stores - _TC"
+
+		make_item(production_item, {"is_stock_item": 1})
+		make_item(rm_item, {"is_stock_item": 1, "has_serial_no": 1, "serial_no_series": "TST-SER-RES-.###"})
+
+		bom = make_bom(
+			item=production_item,
+			source_warehouse=source_warehouse,
+			raw_materials=[rm_item],
+			operating_cost_per_bom_quantity=100,
+			do_not_submit=True,
+		)
+
+		for row in bom.exploded_items:
+			make_stock_entry_test_record(
+				item_code=row.item_code,
+				target=source_warehouse,
+				qty=10,
+				basic_rate=100,
+			)
+
+		wo = make_wo_order_test_record(
+			item=production_item,
+			qty=10,
+			reserve_stock=1,
+			source_warehouse=source_warehouse,
+		)
+
+		self.assertTrue(frappe.get_all("Stock Reservation Entry", filters={"voucher_no": wo.name}))
+
+		wo1 = make_wo_order_test_record(
+			item=production_item,
+			qty=10,
+			reserve_stock=1,
+			source_warehouse=source_warehouse,
+		)
+
+		self.assertFalse(frappe.get_all("Stock Reservation Entry", filters={"voucher_no": wo1.name}))
+
+		transfer_entry = frappe.get_doc(make_stock_entry(wo1.name, "Material Transfer for Manufacture", 10))
+		transfer_entry.save()
+
+		self.assertRaises(frappe.ValidationError, transfer_entry.submit)
+
+	def test_stock_reservation_for_batched_raw_material(self):
+		from erpnext.stock.doctype.stock_entry.stock_entry_utils import (
+			make_stock_entry as make_stock_entry_test_record,
+		)
+
+		production_item = "Test Stock Reservation FG 2"
+		rm_item = "Test Stock Reservation RM 2"
+		source_warehouse = "Stores - _TC"
+
+		make_item(production_item, {"is_stock_item": 1})
+		make_item(
+			rm_item,
+			{
+				"is_stock_item": 1,
+				"has_batch_no": 1,
+				"batch_number_series": "TST-BATCH-RES-.###",
+				"create_new_batch": 1,
+			},
+		)
+
+		bom = make_bom(
+			item=production_item,
+			source_warehouse=source_warehouse,
+			raw_materials=[rm_item],
+			operating_cost_per_bom_quantity=100,
+			do_not_submit=True,
+		)
+
+		for row in bom.exploded_items:
+			make_stock_entry_test_record(
+				item_code=row.item_code,
+				target=source_warehouse,
+				qty=10,
+				basic_rate=100,
+			)
+
+		wo = make_wo_order_test_record(
+			item=production_item,
+			qty=10,
+			reserve_stock=1,
+			source_warehouse=source_warehouse,
+		)
+
+		self.assertTrue(frappe.get_all("Stock Reservation Entry", filters={"voucher_no": wo.name}))
+
+		wo1 = make_wo_order_test_record(
+			item=production_item,
+			qty=10,
+			reserve_stock=1,
+			source_warehouse=source_warehouse,
+		)
+
+		self.assertFalse(frappe.get_all("Stock Reservation Entry", filters={"voucher_no": wo1.name}))
+
+		transfer_entry = frappe.get_doc(make_stock_entry(wo1.name, "Material Transfer for Manufacture", 10))
+		transfer_entry.save()
+
+		self.assertRaises(frappe.ValidationError, transfer_entry.submit)
+
+	def test_auto_stock_reservation_for_batched_raw_material(self):
+		from erpnext.stock.doctype.stock_entry.stock_entry_utils import (
+			make_stock_entry as make_stock_entry_test_record,
+		)
+
+		frappe.db.set_single_value("Stock Settings", "auto_reserve_serial_and_batch", 1)
+
+		production_item = "Test Stock Reservation FG 3"
+		rm_item = "Test Stock Reservation RM 3"
+		source_warehouse = "Stores - _TC"
+
+		make_item(production_item, {"is_stock_item": 1})
+		make_item(
+			rm_item,
+			{
+				"is_stock_item": 1,
+				"has_batch_no": 1,
+				"batch_number_series": "TST-BATCH-RES-.###",
+				"create_new_batch": 1,
+			},
+		)
+
+		bom = make_bom(
+			item=production_item,
+			source_warehouse=source_warehouse,
+			raw_materials=[rm_item],
+			operating_cost_per_bom_quantity=100,
+			do_not_submit=True,
+		)
+
+		itemwise_batches = frappe._dict()
+		for row in bom.exploded_items:
+			se = make_stock_entry_test_record(
+				item_code=row.item_code,
+				target=source_warehouse,
+				qty=10,
+				basic_rate=100,
+			)
+
+			itemwise_batches[row.item_code] = get_batch_from_bundle(se.items[0].serial_and_batch_bundle)
+
+		wo = make_wo_order_test_record(
+			item=production_item,
+			qty=10,
+			reserve_stock=1,
+			source_warehouse=source_warehouse,
+		)
+
+		self.assertTrue(frappe.get_all("Stock Reservation Entry", filters={"voucher_no": wo.name}))
+
+		for row in frappe.get_all("Stock Reservation Entry", filters={"voucher_no": wo.name}):
+			reservation_entry = frappe.get_doc("Stock Reservation Entry", row.name)
+			self.assertTrue(reservation_entry.has_batch_no)
+			self.assertTrue(reservation_entry.sb_entries)
+
+		for row in bom.exploded_items:
+			make_stock_entry_test_record(
+				item_code=row.item_code,
+				target=source_warehouse,
+				qty=10,
+				basic_rate=100,
+			)
+
+		transfer_entry = frappe.get_doc(make_stock_entry(wo.name, "Material Transfer for Manufacture", 10))
+		transfer_entry.save()
+		transfer_entry.submit()
+
+		for row in transfer_entry.items:
+			batch_no = get_batch_from_bundle(row.serial_and_batch_bundle)
+			self.assertEqual(batch_no, itemwise_batches[row.item_code])
 
 
 def make_operation(**kwargs):
@@ -2878,6 +3112,7 @@ def make_wo_order_test_record(**args):
 		"BOM", {"item": wo_order.production_item, "is_active": 1, "is_default": 1}
 	)
 	wo_order.qty = args.qty or 10
+	wo_order.reserve_stock = args.reserve_stock or 0
 	wo_order.wip_warehouse = args.wip_warehouse or "_Test Warehouse - _TC"
 	wo_order.fg_warehouse = args.fg_warehouse or "_Test Warehouse 1 - _TC"
 	wo_order.scrap_warehouse = args.fg_warehouse or "_Test Scrap Warehouse - _TC"

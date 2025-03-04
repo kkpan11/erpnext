@@ -40,7 +40,7 @@ erpnext.PointOfSale.Controller = class {
 				in_list_view: 1,
 				label: __("Opening Amount"),
 				options: "company:company_currency",
-				change: function () {
+				onchange: function () {
 					dialog.fields_dict.balance_details.df.data.some((d) => {
 						if (d.idx == this.doc.idx) {
 							d.opening_amount = this.value;
@@ -459,6 +459,8 @@ erpnext.PointOfSale.Controller = class {
 							() => this.make_return_invoice(doc),
 							() => this.cart.load_invoice(),
 							() => this.item_selector.toggle_component(true),
+							() => this.item_selector.resize_selector(false),
+							() => this.item_details.toggle_component(false),
 						]);
 					});
 				},
@@ -469,6 +471,8 @@ erpnext.PointOfSale.Controller = class {
 						() => this.frm.call("reset_mode_of_payments"),
 						() => this.cart.load_invoice(),
 						() => this.item_selector.toggle_component(true),
+						() => this.item_selector.resize_selector(false),
+						() => this.item_details.toggle_component(false),
 					]);
 				},
 				delete_order: (name) => {
@@ -485,6 +489,7 @@ erpnext.PointOfSale.Controller = class {
 					]);
 				},
 			},
+			pos_profile: this.pos_profile,
 		});
 	}
 
@@ -604,6 +609,14 @@ erpnext.PointOfSale.Controller = class {
 
 				if (this.is_current_item_being_edited(item_row) || from_selector) {
 					await frappe.model.set_value(item_row.doctype, item_row.name, field, value);
+					if (item.serial_no && from_selector) {
+						await frappe.model.set_value(
+							item_row.doctype,
+							item_row.name,
+							"serial_no",
+							item_row.serial_no + `\n${item.serial_no}`
+						);
+					}
 					this.update_cart_html(item_row);
 				}
 			} else {
@@ -681,7 +694,7 @@ erpnext.PointOfSale.Controller = class {
 					i.item_code === item_code &&
 					(!has_batch_no || (has_batch_no && i.batch_no === batch_no)) &&
 					i.uom === uom &&
-					i.rate === flt(rate)
+					i.price_list_rate === flt(rate)
 			);
 		}
 

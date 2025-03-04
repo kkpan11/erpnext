@@ -174,7 +174,11 @@ def validate_quantity(doc, key, args, ref, valid_items, already_returned_items):
 	)
 
 	for column in fields:
-		returned_qty = flt(already_returned_data.get(column, 0)) if len(already_returned_data) > 0 else 0
+		returned_qty = (
+			flt(already_returned_data.get(column, 0), stock_qty_precision)
+			if len(already_returned_data) > 0
+			else 0
+		)
 
 		if column == "stock_qty" and not args.get("return_qty_from_rejected_warehouse"):
 			reference_qty = ref.get(column)
@@ -186,7 +190,7 @@ def validate_quantity(doc, key, args, ref, valid_items, already_returned_items):
 			reference_qty = ref.get(column) * ref.get("conversion_factor", 1.0)
 			current_stock_qty = args.get(column) * args.get("conversion_factor", 1.0)
 
-		max_returnable_qty = flt(reference_qty, stock_qty_precision) - returned_qty
+		max_returnable_qty = flt(flt(reference_qty, stock_qty_precision) - returned_qty, stock_qty_precision)
 		label = column.replace("_", " ").title()
 
 		if reference_qty:
@@ -254,7 +258,7 @@ def get_already_returned_items(doc):
 
 	field = (
 		frappe.scrub(doc.doctype) + "_item"
-		if doc.doctype in ["Purchase Invoice", "Purchase Receipt", "Sales Invoice"]
+		if doc.doctype in ["Purchase Invoice", "Purchase Receipt", "Sales Invoice", "POS Invoice"]
 		else "dn_detail"
 	)
 	data = frappe.db.sql(
@@ -766,6 +770,7 @@ def get_return_against_item_fields(voucher_type):
 		"Delivery Note": "dn_detail",
 		"Sales Invoice": "sales_invoice_item",
 		"Subcontracting Receipt": "subcontracting_receipt_item",
+		"POS Invoice": "sales_invoice_item",
 	}
 	return return_against_item_fields[voucher_type]
 
@@ -1158,3 +1163,29 @@ def get_available_serial_nos(serial_nos, warehouse):
 def get_payment_data(invoice):
 	payment = frappe.db.get_all("Sales Invoice Payment", {"parent": invoice}, ["mode_of_payment", "amount"])
 	return payment
+
+
+@frappe.whitelist()
+def get_pos_invoice_item_returned_qty(pos_invoice, customer, item_row_name):
+	is_return, docstatus = frappe.db.get_value("POS Invoice", pos_invoice, ["is_return", "docstatus"])
+	if not is_return and docstatus == 1:
+		return get_returned_qty_map_for_row(pos_invoice, customer, item_row_name, "POS Invoice")
+
+
+@frappe.whitelist()
+def is_pos_invoice_returnable(pos_invoice):
+	is_return, docstatus, customer = frappe.db.get_value(
+		"POS Invoice", pos_invoice, ["is_return", "docstatus", "customer"]
+	)
+	if is_return or docstatus == 0:
+		return False
+
+	invoice_item_qty = frappe.db.get_all("POS Invoice Item", {"parent": pos_invoice}, ["name", "qty"])
+
+	already_full_returned = 0
+	for d in invoice_item_qty:
+		returned_qty = get_returned_qty_map_for_row(pos_invoice, customer, d.name, "POS Invoice")
+		if returned_qty.qty == d.qty:
+			already_full_returned += 1
+
+	return len(invoice_item_qty) != already_full_returned

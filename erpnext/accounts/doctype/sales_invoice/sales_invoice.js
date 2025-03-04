@@ -65,7 +65,7 @@ erpnext.accounts.SalesInvoiceController = class SalesInvoiceController extends (
 	refresh(doc, dt, dn) {
 		const me = this;
 		super.refresh();
-		if (this.frm.msgbox && this.frm.msgbox.$wrapper.is(":visible")) {
+		if (this.frm?.msgbox && this.frm.msgbox.$wrapper.is(":visible")) {
 			// hide new msgbox
 			this.frm.msgbox.hide();
 		}
@@ -895,8 +895,16 @@ frappe.ui.form.on("Sales Invoice", {
 
 	project: function (frm) {
 		if (frm.doc.project) {
-			frm.events.add_timesheet_data(frm, {
-				project: frm.doc.project,
+			frappe.call({
+				method: "is_auto_fetch_timesheet_enabled",
+				doc: frm.doc,
+				callback: function (r) {
+					if (cint(r.message)) {
+						frm.events.add_timesheet_data(frm, {
+							project: frm.doc.project,
+						});
+					}
+				},
 			});
 		}
 	},

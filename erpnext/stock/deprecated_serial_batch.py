@@ -193,7 +193,7 @@ class DeprecatedBatchNoValuation:
 			if not self.non_batchwise_balance_qty:
 				continue
 
-			if self.non_batchwise_balance_qty.get(batch_no) == 0:
+			if not self.non_batchwise_balance_qty.get(batch_no):
 				self.batch_avg_rate[batch_no] = 0.0
 				self.stock_value_differece[batch_no] = 0.0
 			else:
@@ -364,6 +364,8 @@ class DeprecatedBatchNoValuation:
 
 		if self.sle.voucher_detail_no:
 			query = query.where(sabb.voucher_detail_no != self.sle.voucher_detail_no)
+
+		query = query.where(sabb.voucher_type != "Pick List")
 
 		data = query.run(as_dict=True)
 		if not data:
