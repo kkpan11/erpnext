@@ -40,7 +40,7 @@ frappe.ui.form.on("Opportunity", {
 			erpnext.utils.get_party_details(frm);
 		} else if (frm.doc.opportunity_from == "Lead") {
 			erpnext.utils.map_current_doc({
-				method: "erpnext.crm.doctype.lead.lead.make_opportunity",
+				method: "erpnext.crm.doctype.lead.mapper.make_opportunity",
 				source_name: frm.doc.party_name,
 				frm: frm,
 			});
@@ -111,6 +111,13 @@ frappe.ui.form.on("Opportunity", {
 				},
 				__("Create")
 			);
+
+			let company_currency = erpnext.get_currency(frm.doc.company);
+			if (company_currency != frm.doc.currency) {
+				frm.add_custom_button(__("Fetch Latest Exchange Rate"), function () {
+					frm.trigger("currency");
+				});
+			}
 		}
 
 		if (!frm.doc.__islocal && frm.perm[0].write && frm.doc.docstatus == 0) {
@@ -152,7 +159,7 @@ frappe.ui.form.on("Opportunity", {
 
 	currency: function (frm) {
 		let company_currency = erpnext.get_currency(frm.doc.company);
-		if (company_currency != frm.doc.company) {
+		if (company_currency != frm.doc.currency) {
 			frappe.call({
 				method: "erpnext.setup.utils.get_exchange_rate",
 				args: {
@@ -197,14 +204,14 @@ frappe.ui.form.on("Opportunity", {
 
 	make_supplier_quotation: function (frm) {
 		frappe.model.open_mapped_doc({
-			method: "erpnext.crm.doctype.opportunity.opportunity.make_supplier_quotation",
+			method: "erpnext.crm.doctype.opportunity.mapper.make_supplier_quotation",
 			frm: frm,
 		});
 	},
 
 	make_request_for_quotation: function (frm) {
 		frappe.model.open_mapped_doc({
-			method: "erpnext.crm.doctype.opportunity.opportunity.make_request_for_quotation",
+			method: "erpnext.crm.doctype.opportunity.mapper.make_request_for_quotation",
 			frm: frm,
 		});
 	},
@@ -277,8 +284,10 @@ erpnext.crm.Opportunity = class Opportunity extends frappe.ui.form.Controller {
 			this.frm.set_value("currency", frappe.defaults.get_user_default("Currency"));
 		}
 
+		if (this.frm.is_new() && this.frm.doc.opportunity_type === undefined) {
+			this.frm.doc.opportunity_type = __("Sales");
+		}
 		this.setup_queries();
-		this.frm.trigger("currency");
 	}
 
 	refresh() {
@@ -295,6 +304,21 @@ erpnext.crm.Opportunity = class Opportunity extends frappe.ui.form.Controller {
 			return {
 				query: "erpnext.controllers.queries.item_query",
 				filters: { is_sales_item: 1 },
+			};
+		});
+
+		this.frm.set_query("uom", "items", function (doc, cdt, cdn) {
+			let row = locals[cdt][cdn];
+
+			if (!row.item_code) {
+				return;
+			}
+
+			return {
+				query: "erpnext.controllers.queries.get_item_uom_query",
+				filters: {
+					item_code: row.item_code,
+				},
 			};
 		});
 
@@ -317,14 +341,14 @@ erpnext.crm.Opportunity = class Opportunity extends frappe.ui.form.Controller {
 
 	create_quotation() {
 		frappe.model.open_mapped_doc({
-			method: "erpnext.crm.doctype.opportunity.opportunity.make_quotation",
+			method: "erpnext.crm.doctype.opportunity.mapper.make_quotation",
 			frm: this.frm,
 		});
 	}
 
 	make_customer() {
 		frappe.model.open_mapped_doc({
-			method: "erpnext.crm.doctype.opportunity.opportunity.make_customer",
+			method: "erpnext.crm.doctype.opportunity.mapper.make_customer",
 			frm: this.frm,
 		});
 	}

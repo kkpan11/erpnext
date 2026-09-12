@@ -1,12 +1,11 @@
 # Copyright (c) 2024, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
-from collections import defaultdict
 
 import frappe
 from frappe import _
 from frappe.query_builder.functions import Sum
-from frappe.utils import flt, today
+from frappe.utils import flt, get_datetime, today
 
 
 def execute(filters=None):
@@ -107,7 +106,9 @@ def get_batchwise_data_from_stock_ledger(filters):
 			Sum(table.actual_qty).as_("balance_qty"),
 		)
 		.where(table.is_cancelled == 0)
-		.groupby(table.batch_no, table.item_code, table.warehouse)
+		# batch.expiry_date comes from the Batch table; postgres requires its PK in the GROUP BY for
+		# it to be selectable. batch.name is 1:1 with the grouped batch_no, so groups are unchanged.
+		.groupby(table.batch_no, table.item_code, table.warehouse, batch.name)
 	)
 
 	query = get_query_based_on_filters(query, batch, table, filters)
@@ -138,7 +139,10 @@ def get_batchwise_data_from_serial_batch_bundle(batchwise_data, filters):
 			Sum(ch_table.qty).as_("balance_qty"),
 		)
 		.where((table.is_cancelled == 0) & (table.docstatus == 1))
-		.groupby(ch_table.batch_no, table.item_code, ch_table.warehouse)
+		# Group by the same (SLE) warehouse that is selected -- the original grouped by
+		# ch_table.warehouse while selecting table.warehouse, which postgres rejects. Also group by
+		# the Batch PK so batch.expiry_date is selectable (1:1 with the grouped batch_no).
+		.groupby(ch_table.batch_no, table.item_code, table.warehouse, batch.name)
 	)
 
 	query = get_query_based_on_filters(query, batch, table, filters)
@@ -154,6 +158,9 @@ def get_batchwise_data_from_serial_batch_bundle(batchwise_data, filters):
 
 
 def get_query_based_on_filters(query, batch, table, filters):
+	if filters.company:
+		query = query.where(table.company == filters.company)
+
 	if filters.item_code:
 		query = query.where(table.item_code == filters.item_code)
 
@@ -167,7 +174,8 @@ def get_query_based_on_filters(query, batch, table, filters):
 		query = query.where(batch.batch_qty > 0)
 
 	else:
-		query = query.where(table.posting_date <= filters.to_date)
+		to_date = get_datetime(str(filters.to_date) + " 23:59:59")
+		query = query.where(table.posting_datetime <= to_date)
 
 	if filters.warehouse:
 		lft, rgt = frappe.db.get_value("Warehouse", filters.warehouse, ["lft", "rgt"])

@@ -1,5 +1,6 @@
 {
  "actions": [],
+ "allow_bulk_edit": 1,
  "creation": "2016-04-18 07:38:26.314642",
  "doctype": "DocType",
  "editable_grid": 1,
@@ -21,13 +22,18 @@
   "amount",
   "column_break_11",
   "transferred_qty",
+  "requested_qty",
+  "picked_qty",
   "consumed_qty",
   "returned_qty",
   "section_break_idhr",
   "available_qty_at_source_warehouse",
   "available_qty_at_wip_warehouse",
   "column_break_jash",
-  "stock_reserved_qty"
+  "stock_reserved_qty",
+  "is_additional_item",
+  "is_customer_provided_item",
+  "voucher_detail_reference"
  ],
  "fields": [
   {
@@ -50,7 +56,9 @@
    "ignore_user_permissions": 1,
    "in_list_view": 1,
    "label": "Source Warehouse",
-   "options": "Warehouse"
+   "link_filters": "[[\"Warehouse\",\"disabled\",\"=\",0],[\"Warehouse\",\"is_group\",\"=\",0]]",
+   "options": "Warehouse",
+   "read_only_depends_on": "eval:parent.subcontracting_inward_order && doc.is_customer_provided_item"
   },
   {
    "fieldname": "column_break_3",
@@ -88,7 +96,24 @@
    "read_only": 1
   },
   {
+   "depends_on": "eval:!parent.skip_transfer",
+   "fieldname": "requested_qty",
+   "fieldtype": "Float",
+   "label": "Requested Qty",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:!parent.skip_transfer",
+   "fieldname": "picked_qty",
+   "fieldtype": "Float",
+   "label": "Picked Qty",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
    "default": "0",
+   "depends_on": "eval:!parent.subcontracting_inward_order",
    "fieldname": "allow_alternative_item",
    "fieldtype": "Check",
    "label": "Allow Alternative Item"
@@ -155,7 +180,8 @@
    "fieldname": "stock_uom",
    "fieldtype": "Link",
    "label": "Stock UOM",
-   "options": "UOM"
+   "options": "UOM",
+   "read_only": 1
   },
   {
    "fieldname": "section_break_idhr",
@@ -172,17 +198,43 @@
    "no_copy": 1,
    "print_hide": 1,
    "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_additional_item",
+   "fieldtype": "Check",
+   "label": "Is Additional Item",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "depends_on": "is_additional_item",
+   "fieldname": "voucher_detail_reference",
+   "fieldtype": "Data",
+   "label": "Voucher Detail Reference",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fetch_from": "item_code.is_customer_provided_item",
+   "fieldname": "is_customer_provided_item",
+   "fieldtype": "Check",
+   "label": "Is Customer Provided Item",
+   "read_only": 1
   }
  ],
+ "grid_page_length": 50,
  "istable": 1,
  "links": [],
- "modified": "2024-11-20 15:48:16.823384",
+ "modified": "2026-08-07 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Manufacturing",
  "name": "Work Order Item",
  "owner": "Administrator",
  "permissions": [],
  "quick_entry": 1,
+ "row_format": "Dynamic",
  "sort_field": "creation",
  "sort_order": "DESC",
  "states": [],

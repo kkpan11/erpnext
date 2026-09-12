@@ -1,6 +1,7 @@
 {
  "actions": [],
- "creation": "2014-10-16 14:35:41.950175",
+ "allow_bulk_edit": 1,
+ "creation": "2025-04-09 12:12:19.824560",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
@@ -10,17 +11,21 @@
   "status",
   "completed_qty",
   "process_loss_qty",
+  "pending_qty",
   "column_break_4",
   "bom",
   "workstation_type",
   "workstation",
   "sequence_id",
+  "quality_inspection_required",
   "section_break_insy",
   "bom_no",
   "finished_good",
   "is_subcontracted",
   "skip_material_transfer",
   "backflush_from_wip_warehouse",
+  "batch_split",
+  "weight_per_piece",
   "column_break_vjih",
   "source_warehouse",
   "wip_warehouse",
@@ -110,13 +115,15 @@
    "fieldname": "planned_start_time",
    "fieldtype": "Datetime",
    "label": "Planned Start Time",
-   "no_copy": 1
+   "no_copy": 1,
+   "read_only": 1
   },
   {
    "fieldname": "planned_end_time",
    "fieldtype": "Datetime",
    "label": "Planned End Time",
-   "no_copy": 1
+   "no_copy": 1,
+   "read_only": 1
   },
   {
    "fieldname": "column_break_10",
@@ -191,16 +198,17 @@
    "read_only": 1
   },
   {
+   "default": "1",
    "fieldname": "batch_size",
    "fieldtype": "Float",
    "label": "Batch Size",
-   "read_only": 1
+   "non_negative": 1
   },
   {
    "fieldname": "sequence_id",
    "fieldtype": "Int",
-   "hidden": 1,
    "label": "Sequence ID",
+   "non_negative": 1,
    "print_hide": 1
   },
   {
@@ -292,17 +300,46 @@
    "fieldtype": "Check",
    "label": "Backflush Materials From WIP Warehouse",
    "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "batch_split",
+   "fieldtype": "Check",
+   "label": "Batch Split",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.batch_split",
+   "fieldname": "weight_per_piece",
+   "fieldtype": "Float",
+   "label": "Weight Per Piece",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "quality_inspection_required",
+   "fieldtype": "Check",
+   "label": "Quality Inspection Required"
+  },
+  {
+   "fieldname": "pending_qty",
+   "fieldtype": "Float",
+   "label": "Pending Qty",
+   "no_copy": 1,
+   "read_only": 1
   }
  ],
+ "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2024-06-03 15:57:17.958543",
+ "modified": "2026-08-28 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Manufacturing",
  "name": "Work Order Operation",
  "owner": "Administrator",
  "permissions": [],
+ "row_format": "Dynamic",
  "sort_field": "creation",
  "sort_order": "DESC",
  "states": [],
